@@ -82,7 +82,7 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 13) -> pd.Dat
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .pipe(pd.to_numeric, errors="coerce")
     )
-    pod_numbers = [ ''.join(filter(str.isdigit, c)) or c for c in pod_cols ]
+    pod_numbers = [''.join(filter(str.isdigit, c)) or c for c in pod_cols]
     summary = pd.DataFrame({
         "POD Number": pod_numbers,
         "Total Points": totals.values
@@ -115,12 +115,16 @@ sheet_ids.sort(key=lambda x: x[0])
 dsets = []  # (idx, title, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 2:
-        df_raw, title = load_sheet(sid, worksheet_name="Channel-View")
-        df_leader = pd.DataFrame()
+        # First tab: Channel-view raw
+        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
+        dsets.append((idx, title_ch, df_ch, pd.DataFrame()))
+        # Second tab: POD-View raw
+        df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
+        dsets.append((idx, title_pod, df_pod, pd.DataFrame()))
     else:
         df_raw, title = load_sheet(sid)
         df_leader = build_leaderboard(df_raw, total_row_index=13)
-    dsets.append((idx, title, df_raw, df_leader))
+        dsets.append((idx, title, df_raw, df_leader))
 
 # ── Refresh button clears caches ────────────────────────────────────────────────
 if st.button("🔄 Refresh Data"):
@@ -132,20 +136,17 @@ if st.button("🔄 Refresh Data"):
 tabs = st.tabs([title for _, title, _, _ in dsets])
 for tab, (idx, title, df_raw, df_leader) in zip(tabs, dsets):
     with tab:
-        if idx == 2:
+        if df_leader.empty:
             st.subheader(f"📋 {title} (Raw Data)")
             st.dataframe(df_raw, use_container_width=True)
         else:
             st.subheader(f"🏆 {title} Leaderboard")
-            if not df_leader.empty:
-                styled = df_leader.style.apply(highlight_top_dark, axis=1)
-                st.dataframe(styled, use_container_width=True)
-                with st.expander("📋 Raw Data"):
-                    st.dataframe(df_raw, use_container_width=True)
-                    csv = df_leader.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download CSV", data=csv,
-                        file_name=f"{title}_leaderboard.csv"
-                    )
-            else:
-                st.warning("No leaderboard data for this sheet.")
+            styled = df_leader.style.apply(highlight_top_dark, axis=1)
+            st.dataframe(styled, use_container_width=True)
+            with st.expander("📋 Raw Data"):
+                st.dataframe(df_raw, use_container_width=True)
+                csv = df_leader.to_csv(index=False)
+                st.download_button(
+                    "📥 Download CSV", data=csv,
+                    file_name=f"{title}_leaderboard.csv"
+                )
