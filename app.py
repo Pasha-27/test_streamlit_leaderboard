@@ -156,16 +156,38 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                     except:
                         prog = 0.0
 
-                    # Dark-theme friendly bar colors
+                    # Choose a dark-theme friendly color based on progress
                     if prog < 20:
-                        bar_color = "#777777"       # grey
+                        bar_color = "#555555"  # dark grey
                     elif prog < 30:
-                        bar_color = "#c0392b"       # dark red
+                        bar_color = "#c0392b"  # dark red
                     elif prog < 40:
-                        bar_color = "#d35400"       # dark orange
+                        bar_color = "#d35400"  # dark orange
                     elif prog < 50:
-                        bar_color = "#f39c12"       # medium yellow
+                        bar_color = "#f39c12"  # medium yellow
                     else:
+                        bar_color = "#27ae60"  # vibrant green
+
+                    # Display channel name & percentage
+                    st.markdown(
+                        f'<div style="display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;">'
+                        f'<span>{ch}</span><span>{int(prog)}%</span></div>',
+                        unsafe_allow_html=True
+                    )
+
+                    # Display custom progress bar
+                    st.markdown(
+                        f'<div style="background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;">'
+                        f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;"></div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+
+                with st.expander("📋 Raw Data"):
+                    st.dataframe(df_raw, use_container_width=True)
+            else:
+                st.warning("No data available for Channel-View.")
+        else:
                         bar_color = "#27ae60"       # vibrant green
 
                     # Display channel name & percentage larger
