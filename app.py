@@ -20,6 +20,19 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive.readonly",
 ]
 
+# ── Utility: make header names unique ───────────────────────────────────────────
+def make_unique(headers):
+    seen = {}
+    unique = []
+    for h in headers:
+        if h not in seen:
+            seen[h] = 0
+            unique.append(h)
+        else:
+            seen[h] += 1
+            unique.append(f"{h}_{seen[h]}")
+    return unique
+
 # ── Cache the gspread client ───────────────────────────────────────────────────
 @st.cache_resource
 def get_gspread_client():
@@ -32,26 +45,23 @@ def get_gspread_client():
     creds = Credentials.from_service_account_info(svc, scopes=SCOPE)
     return gspread.authorize(creds)
 
-# ── Load an entire worksheet by sheet_id and optional worksheet_name ────────────
+# ── Load worksheet into DataFrame with unique headers ──────────────────────────
 @st.cache_data(ttl=300)
 def load_sheet(sheet_id: str, worksheet_name: str = None):
     client = get_gspread_client()
     sheet = client.open_by_key(sheet_id)
     try:
-        if worksheet_name:
-            ws = sheet.worksheet(worksheet_name)
-        else:
-            ws = sheet.worksheets()[0]
+        ws = sheet.worksheet(worksheet_name) if worksheet_name else sheet.worksheets()[0]
     except WorksheetNotFound:
         available = [w.title for w in sheet.worksheets()]
-        st.error(f"⚠️ Worksheet '{worksheet_name}' not found. Available worksheets: {available}")
+        st.error(f"⚠️ Worksheet '{worksheet_name}' not found. Available: {available}")
         return pd.DataFrame(), worksheet_name or ""
-
     data = ws.get_all_values()
     if not data or len(data) < 2:
         st.error("⚠️ No data rows found. Check your sheet ID & sharing permissions.")
         return pd.DataFrame(), ws.title
-    header, *rows = data
+    raw_header, *rows = data
+    header = make_unique(raw_header)
     df_raw = pd.DataFrame(rows, columns=header)
     return df_raw, ws.title
 
@@ -72,25 +82,22 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 13) -> pd.Dat
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .pipe(pd.to_numeric, errors="coerce")
     )
-    def extract_pod_num(hdr: str) -> str:
-        digits = ''.join(filter(str.isdigit, hdr))
-        return digits or hdr
-    pod_numbers = [extract_pod_num(h) for h in pod_cols]
+    pod_numbers = [ ''.join(filter(str.isdigit, c)) or c for c in pod_cols ]
     summary = pd.DataFrame({
         "POD Number": pod_numbers,
         "Total Points": totals.values
     })
     summary = summary.sort_values("Total Points", ascending=False).reset_index(drop=True)
     summary["Rank"] = summary.index + 1
-    return summary[["Rank","POD Number","Total Points"]]
+    return summary[["Rank", "POD Number", "Total Points"]]
 
 # ── Highlight styling for dark theme ───────────────────────────────────────────
 def highlight_top_dark(row):
     colors = {1: "#664400", 2: "#555555", 3: "#553300"}
     c = colors.get(row["Rank"])
     if c:
-        return [f"background-color:{c};color:#fff"] * 3
-    return [""] * 3
+        return [f"background-color:{c};color:#fff"] * len(row)
+    return [""] * len(row)
 
 # ── Discover sheet IDs in secrets ─────────────────────────────────────────────
 sheet_ids = []
@@ -99,19 +106,16 @@ for key, val in st.secrets.items():
     if m:
         idx = int(m.group(1)) if m.group(1) else 1
         sheet_ids.append((idx, val))
-
 if not sheet_ids:
     st.error("⚠️ No sheet IDs found in secrets. Add 'sheet_id_1', 'sheet_id_2', ...")
     st.stop()
-
 sheet_ids.sort(key=lambda x: x[0])
 
-# ── Load raw data and build for each sheet ─────────────────────────────────────
-dsets = []  # list of (idx, sheet_title, df_raw, df_leader)
+# ── Load data and build sets ───────────────────────────────────────────────────
+dsets = []  # (idx, title, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 2:
-        # For second sheet, load 'Channel-View' worksheet and only raw data
-        df_raw, title = load_sheet(sid, worksheet_name="Channel-View")
+        df_raw, title = load_sheet(sid, worksheet_name="Channel-view")
         df_leader = pd.DataFrame()
     else:
         df_raw, title = load_sheet(sid)
@@ -124,7 +128,7 @@ if st.button("🔄 Refresh Data"):
     get_gspread_client.clear()
     st.experimental_rerun()
 
-# ── Render tabs for each sheet ─────────────────────────────────────────────────
+# ── Render tabs ────────────────────────────────────────────────────────────────
 tabs = st.tabs([title for _, title, _, _ in dsets])
 for tab, (idx, title, df_raw, df_leader) in zip(tabs, dsets):
     with tab:
