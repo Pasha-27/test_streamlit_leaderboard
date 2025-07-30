@@ -164,13 +164,15 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                     else:
                         bar_color = "#27ae60"
                     st.markdown(
-                        f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
-                        f"<span>{ch}</span><span>{int(prog)}%</span></div>",
-                        unsafe_allow_html=True
-                    ))}%</span></div>",
+                        f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'><span>{ch}</span><span>{int(prog)}%</span></div>",
                         unsafe_allow_html=True
                     )
+                    # Display custom progress bar
                     st.markdown(
+                        f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'><div style='width:{display_prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div></div>",
+                        unsafe_allow_html=True
+                    )
+st.markdown(
                         f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'>"
                         f"<div style='width:{display_prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
                         f"</div>",
