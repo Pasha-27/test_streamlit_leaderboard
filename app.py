@@ -170,11 +170,18 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
 
                     # Display channel name & percentage larger
                     st.markdown(
-                        f'<div style="display:flex; justify-content:space-between; font-size:28px; "
-                        f"font-weight:bold; margin-top:16px;">'
-                        f'<span>{ch}</span><span>{int(prog)}%</span></div>',
-                        unsafe_allow_html=True
-                    )
+    f'<div style="display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;">'
+    f'<span>{ch}</span><span>{int(prog)}%</span></div>',
+    unsafe_allow_html=True
+)
+
+# Progress bar
+st.markdown(
+    f'<div style="background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;">'
+    f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;"></div>'
+    f'</div>',
+    unsafe_allow_html=True
+)
 
                     # Custom progress bar (height:24px)
                     st.markdown(
