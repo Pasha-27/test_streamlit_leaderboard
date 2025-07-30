@@ -141,7 +141,6 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
             if not df_raw.empty:
                 channel_col = df_raw.columns[0]
                 progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
-                                                # Only take rows 3–9 (exactly 7 channels)
                 df_channels = df_raw.iloc[1:8].copy()
                 for _, row in df_channels.iterrows():
                     ch = row[channel_col]
@@ -151,25 +150,27 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         prog = float(prog_val)
                     except:
                         prog = 0.0
+                    # cap at 100%
+                    display_prog = min(prog, 100)
                     # color
-                    if prog < 20:
+                    if display_prog < 20:
                         bar_color = "#555555"
-                    elif prog < 30:
+                    elif display_prog < 30:
                         bar_color = "#c0392b"
-                    elif prog < 40:
+                    elif display_prog < 40:
                         bar_color = "#d35400"
-                    elif prog < 50:
+                    elif display_prog < 50:
                         bar_color = "#f39c12"
                     else:
                         bar_color = "#27ae60"
                     st.markdown(
                         f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
-                        f"<span>{ch}</span><span>{int(prog)}%</span></div>",
+                        f"<span>{ch}</span><span>{int(display_prog)}%</span></div>",
                         unsafe_allow_html=True
                     )
                     st.markdown(
                         f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'>"
-                        f"<div style='width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
+                        f"<div style='width:{display_prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
                         f"</div>",
                         unsafe_allow_html=True
                     )
