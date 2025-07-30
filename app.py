@@ -116,7 +116,7 @@ dsets = []  # (idx, title, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 2:
         # First tab: Channel-view raw
-        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-view")
+        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
         dsets.append((idx, title_ch, df_ch, pd.DataFrame()))
         # Second tab: POD-View raw
         df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
