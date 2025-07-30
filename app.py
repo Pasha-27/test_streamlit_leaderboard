@@ -67,11 +67,11 @@ if st.button("🔄 Refresh Data"):
     get_gspread_client.clear()
     st.experimental_rerun()
 
-# ── Extract “Total points” row (sheet row 12 → df_raw.iloc[10]) ────────────────
+# ── Extract “Total points” row (sheet row 14 → df_raw.iloc[12]) ────────────────
 df = pd.DataFrame()
 try:
-    # zero‑based: header was row1, df_raw[0] is row2 → so row12 is df_raw.iloc[10]
-    total_row = df_raw.iloc[10]
+    # zero-based: header was row1, df_raw[0] is row2 → so row14 is df_raw.iloc[12]
+    total_row = df_raw.iloc[12]
     # pick your POD‑columns
     pod_cols = [c for c in df_raw.columns if "pod" in c.lower()]
 
@@ -98,7 +98,7 @@ try:
         df = summary[["Rank", "POD Number", "Total Points"]]
 
 except IndexError:
-    st.error("⚠️ Your sheet doesn’t have a row 12. Adjust the row index in code.")
+    st.error("⚠️ Your sheet doesn’t have a row 14. Adjust the row index in code.")
 except Exception as e:
     st.error(f"Error processing totals row: {e}")
 
