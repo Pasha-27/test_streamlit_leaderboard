@@ -16,11 +16,26 @@ st.success("✅ Step 1: Streamlit is working!")
 # Step 2: Check imports
 try:
     import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
-    st.success("✅ Step 2: All imports successful!")
+    st.success("✅ Step 2a: gspread imported successfully!")
 except ImportError as e:
-    st.error(f"❌ Step 2: Import error: {e}")
+    st.error(f"❌ Step 2a: gspread import error: {e}")
     st.stop()
+
+try:
+    from google.oauth2.service_account import Credentials
+    st.success("✅ Step 2b: google-auth imported successfully!")
+except ImportError as e:
+    st.error(f"❌ Step 2b: google-auth import error: {e}")
+    st.info("💡 Using fallback oauth2client...")
+    try:
+        from oauth2client.service_account import ServiceAccountCredentials
+        st.success("✅ Step 2b: oauth2client imported successfully!")
+        USE_OAUTH2CLIENT = True
+    except ImportError as e2:
+        st.error(f"❌ Step 2b: Both auth libraries failed: {e2}")
+        st.stop()
+else:
+    USE_OAUTH2CLIENT = False
 
 # Step 3: Check if secrets exist
 try:
@@ -28,6 +43,7 @@ try:
         st.success("✅ Step 3: GCP service account secrets found!")
     else:
         st.error("❌ Step 3: 'gcp_service_account' not found in secrets")
+        st.info("💡 Make sure you've added secrets in Streamlit Cloud dashboard")
         st.stop()
     
     if "sheet_id" in st.secrets:
@@ -80,7 +96,11 @@ if st.button("Test Connection"):
             ]
             
             st.info("🔑 Creating credentials...")
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_INFO, SCOPE)
+            
+            if USE_OAUTH2CLIENT:
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_INFO, SCOPE)
+            else:
+                creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPE)
             
             st.info("🔐 Authorizing client...")
             client = gspread.authorize(creds)
@@ -89,7 +109,7 @@ if st.button("Test Connection"):
             sheet = client.open_by_key(SHEET_ID)
             
             st.info("📊 Getting worksheet...")
-            worksheet = sheet.sheet1  # or sheet.worksheets()[0]
+            worksheet = sheet.sheet1
             
             st.info("📋 Reading data...")
             # Try to get just first few rows to test
@@ -122,51 +142,55 @@ with st.expander("Show Debug Info"):
     import sys
     st.write(sys.version)
     
-    st.write("**Installed packages:**")
-    try:
-        import pkg_resources
-        installed_packages = [d for d in pkg_resources.working_set]
-        relevant_packages = [str(d) for d in installed_packages if any(pkg in str(d).lower() for pkg in ['streamlit', 'gspread', 'oauth2', 'pandas'])]
-        for pkg in relevant_packages:
-            st.write(f"- {pkg}")
-    except:
-        st.write("Could not retrieve package information")
+    st.write("**Streamlit version:**")
+    st.write(st.__version__)
+    
+    st.write("**Environment:**")
+    import os
+    st.write(f"Environment: {'Streamlit Cloud' if 'STREAMLIT_SHARING' in os.environ else 'Local'}")
     
     st.write("**Secrets keys available:**")
     st.write(list(st.secrets.keys()))
 
-# Instructions
+# Instructions for Streamlit Cloud
 st.markdown("---")
-st.subheader("📋 Next Steps")
+st.subheader("☁️ Streamlit Cloud Specific Steps")
 
 st.markdown("""
-**If you see errors above:**
+**If you're still getting import errors on Streamlit Cloud:**
 
-1. **Import errors:** Install missing packages:
-   ```bash
-   pip install streamlit pandas gspread oauth2client
+1. **Check your repository structure:**
+   ```
+   your-repo/
+   ├── app.py
+   ├── requirements.txt  ← Must be in root folder
+   └── README.md
    ```
 
-2. **Secrets errors:** Check your `.streamlit/secrets.toml` file:
-   - Make sure it exists in the right location
-   - Verify all required fields are present
-   - Check for syntax errors (proper quotes, brackets)
+2. **Verify requirements.txt content** (no extra spaces):
+   ```
+   streamlit
+   pandas
+   gspread==5.12.0
+   google-auth==2.23.4
+   google-auth-oauthlib==1.1.0
+   google-auth-httplib2==0.1.1
+   ```
 
-3. **Connection errors:** 
-   - Verify your Google Sheet is shared with the service account email
-   - Check that the sheet_id is correct
-   - Ensure Google Sheets API is enabled in Google Cloud Console
+3. **Force redeploy:**
+   - Go to your Streamlit Cloud dashboard
+   - Click "Reboot app" or "Delete and redeploy"
+   - Sometimes Streamlit Cloud caches old requirements
 
-4. **API errors:**
-   - Enable Google Sheets API and Google Drive API
-   - Check service account permissions
-   - Verify the sheet exists and is accessible
+4. **Check app logs:**
+   - In Streamlit Cloud, click "Manage app"
+   - Look at the build logs for any error messages
+   - You should see lines like "Installing gspread..."
 
-**Common fixes:**
-- Double-check the sheet ID from your Google Sheets URL
-- Make sure the service account email has access to the sheet
-- Verify your secrets.toml file matches the JSON file exactly
+5. **Add secrets in Streamlit Cloud:**
+   - Go to app settings → Secrets
+   - Paste your secrets there (not in repository)
 """)
 
 st.markdown("---")
-st.info("💡 Once all steps show ✅, your main app should work!")
+st.info("💡 Try rebooting your Streamlit Cloud app after updating requirements.txt!")
