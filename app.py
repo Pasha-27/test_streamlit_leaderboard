@@ -139,14 +139,10 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
         if label == "Channel-View":
             st.subheader("📈 Channel Progress")
             if not df_raw.empty:
-                # Determine channel and progress columns
                 channel_col = df_raw.columns[0]
                 progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
-
-                # Filter rows starting from sheet row 3 where channel names are non-empty
                 df_channels = df_raw.iloc[2:].copy()
                 df_channels = df_channels[df_channels[channel_col].astype(str).str.strip() != ""]
-
                 for _, row in df_channels.iterrows():
                     ch = row[channel_col]
                     prog_raw = str(row[progress_col]).strip()
@@ -155,66 +151,28 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         prog = float(prog_val)
                     except:
                         prog = 0.0
-
-                    # Choose a dark-theme friendly color based on progress
+                    # color
                     if prog < 20:
-                        bar_color = "#555555"  # dark grey
+                        bar_color = "#555555"
                     elif prog < 30:
-                        bar_color = "#c0392b"  # dark red
+                        bar_color = "#c0392b"
                     elif prog < 40:
-                        bar_color = "#d35400"  # dark orange
+                        bar_color = "#d35400"
                     elif prog < 50:
-                        bar_color = "#f39c12"  # medium yellow
+                        bar_color = "#f39c12"
                     else:
-                        bar_color = "#27ae60"  # vibrant green
-
-                    # Display channel name & percentage
+                        bar_color = "#27ae60"
                     st.markdown(
-                        f'<div style="display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;">'
-                        f'<span>{ch}</span><span>{int(prog)}%</span></div>',
+                        f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
+                        f"<span>{ch}</span><span>{int(prog)}%</span></div>",
                         unsafe_allow_html=True
                     )
-
-                    # Display custom progress bar
                     st.markdown(
-                        f'<div style="background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;">'
-                        f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;"></div>'
-                        f'</div>',
+                        f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'>"
+                        f"<div style='width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
+                        f"</div>",
                         unsafe_allow_html=True
                     )
-
-                with st.expander("📋 Raw Data"):
-                    st.dataframe(df_raw, use_container_width=True)
-            else:
-                st.warning("No data available for Channel-View.")
-        else:
-                        bar_color = "#27ae60"       # vibrant green
-
-                    # Display channel name & percentage larger
-                    st.markdown(
-    f'<div style="display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;">'
-    f'<span>{ch}</span><span>{int(prog)}%</span></div>',
-    unsafe_allow_html=True
-)
-
-# Progress bar
-st.markdown(
-    f'<div style="background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;">'
-    f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;"></div>'
-    f'</div>',
-    unsafe_allow_html=True
-)
-
-                    # Custom progress bar (height:24px)
-                    st.markdown(
-                        f'<div style="background-color:#222222; border-radius:12px; width:100%; "
-                        f"height:24px; margin-bottom:12px;">'
-                        f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; '
-                        f"border-radius:12px;"></div>'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
-
                 with st.expander("📋 Raw Data"):
                     st.dataframe(df_raw, use_container_width=True)
             else:
