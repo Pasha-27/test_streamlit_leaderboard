@@ -31,7 +31,7 @@ def get_gspread_client():
     creds = Credentials.from_service_account_info(svc, scopes=SCOPE)
     return gspread.authorize(creds)
 
-# ── Load an entire worksheet by sheet_id ────────────────────────────────────────
+# ── Load an entire worksheet by sheet_id and optional worksheet_name ────────────
 @st.cache_data(ttl=300)
 def load_sheet(sheet_id: str, worksheet_name: str = None):
     client = get_gspread_client()
@@ -94,12 +94,17 @@ if not sheet_ids:
     st.stop()
 sheet_ids.sort(key=lambda x: x[0])
 
-# ── Load raw data and build leaderboards ───────────────────────────────────────
-dsets = []  # list of (sheet_title, df_raw, df_leader)
+# ── Load raw data and build for each sheet ─────────────────────────────────────
+dsets = []  # list of (idx, sheet_title, df_raw, df_leader)
 for idx, sid in sheet_ids:
-    df_raw, title = load_sheet(sid)
-    df_leader = build_leaderboard(df_raw, total_row_index=13)
-    dsets.append((title, df_raw, df_leader))
+    if idx == 2:
+        # For second sheet, load 'Channel-view' worksheet and only raw data
+        df_raw, title = load_sheet(sid, worksheet_name="Channel-view")
+        df_leader = pd.DataFrame()
+    else:
+        df_raw, title = load_sheet(sid)
+        df_leader = build_leaderboard(df_raw, total_row_index=13)
+    dsets.append((idx, title, df_raw, df_leader))
 
 # ── Refresh button clears caches ────────────────────────────────────────────────
 if st.button("🔄 Refresh Data"):
@@ -108,19 +113,23 @@ if st.button("🔄 Refresh Data"):
     st.experimental_rerun()
 
 # ── Render tabs for each sheet ─────────────────────────────────────────────────
-tabs = st.tabs([title for title,_,_ in dsets])
-for tab, (title, df_raw, df_leader) in zip(tabs, dsets):
+tabs = st.tabs([title for _, title, _, _ in dsets])
+for tab, (idx, title, df_raw, df_leader) in zip(tabs, dsets):
     with tab:
-        st.subheader(f"🏆 {title} Leaderboard")
-        if not df_leader.empty:
-            styled = df_leader.style.apply(highlight_top_dark, axis=1)
-            st.dataframe(styled, use_container_width=True)
-            with st.expander("📋 Raw Data"):
-                st.dataframe(df_raw, use_container_width=True)
-                csv = df_leader.to_csv(index=False)
-                st.download_button(
-                    "📥 Download CSV", data=csv,
-                    file_name=f"{title}_leaderboard.csv"
-                )
+        if idx == 2:
+            st.subheader(f"📋 {title} (Raw Data)")
+            st.dataframe(df_raw, use_container_width=True)
         else:
-            st.warning("No leaderboard data for this sheet.")
+            st.subheader(f"🏆 {title} Leaderboard")
+            if not df_leader.empty:
+                styled = df_leader.style.apply(highlight_top_dark, axis=1)
+                st.dataframe(styled, use_container_width=True)
+                with st.expander("📋 Raw Data"):
+                    st.dataframe(df_raw, use_container_width=True)
+                    csv = df_leader.to_csv(index=False)
+                    st.download_button(
+                        "📥 Download CSV", data=csv,
+                        file_name=f"{title}_leaderboard.csv"
+                    )
+            else:
+                st.warning("No leaderboard data for this sheet.")
