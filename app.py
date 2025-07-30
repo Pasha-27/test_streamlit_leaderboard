@@ -72,7 +72,6 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.Dat
     except Exception:
         st.error(f"⚠️ Totals row index {total_row_index} out of range.")
         return pd.DataFrame()
-    # identify POD columns
     pod_cols = [c for c in df_raw.columns if re.search(r"pod", c, re.I)]
     if not pod_cols:
         st.error("⚠️ No POD columns found. Ensure headers contain 'POD'.")
@@ -114,15 +113,12 @@ sheet_ids.sort(key=lambda x: x[0])
 dsets = []  # (tab_label, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 1:
-        # Live Leaderboard sheet: use 'LIVE LEADERBOARD' worksheet and row 14 totals
         df_live, title_live = load_sheet(sid, worksheet_name="LIVE LEADERBOARD")
         df_leader = build_leaderboard(df_live, total_row_index=12)
         dsets.append((title_live, df_live, df_leader))
     elif idx == 2:
-        # Channel-view raw with progress bars
         df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
         dsets.append((title_ch, df_ch, pd.DataFrame()))
-        # POD-View raw
         df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
         dsets.append((title_pod, df_pod, pd.DataFrame()))
 
@@ -143,21 +139,40 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
         if label == "Channel-View":
             st.subheader("📈 Channel Progress")
             if not df_raw.empty:
-                # assume Column A=channel, Column F=progress
                 channel_col = df_raw.columns[0]
                 progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
-                # rows 3-9 in sheet => df_raw.iloc[1:9]
-                for _, row in df_raw.iloc[1:9].iterrows():
+                for _, row in df_raw.iloc[2:9].iterrows():
                     ch = row[channel_col]
                     prog_raw = str(row[progress_col]).strip()
-                    # strip non-numeric
                     prog_val = re.sub(r"[^0-9.]", "", prog_raw)
                     try:
                         prog = float(prog_val)
                     except:
                         prog = 0.0
-                    st.write(f"**{ch}**")
-                    st.progress(min(max(int(prog), 0), 100))
+                    # Dark-theme friendly bar colors
+                    if prog < 20:
+                        bar_color = "#777777"       # grey
+                    elif prog < 30:
+                        bar_color = "#c0392b"       # dark red
+                    elif prog < 40:
+                        bar_color = "#d35400"       # dark orange
+                    elif prog < 50:
+                        bar_color = "#f39c12"       # medium yellow
+                    else:
+                        bar_color = "#27ae60"       # vibrant green
+                    # Display channel name & percentage larger
+                    st.markdown(
+                        f'<div style="display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;">'
+                        f'<span>{ch}</span><span>{int(prog)}%</span></div>',
+                        unsafe_allow_html=True
+                    )
+                    # Custom progress bar (height:24px)
+                    st.markdown(
+                        f'<div style="background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;">'
+                        f'<div style="width:{prog}%; background-color:{bar_color}; height:100%; border-radius:12px;"></div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
                 with st.expander("📋 Raw Data"):
                     st.dataframe(df_raw, use_container_width=True)
             else:
