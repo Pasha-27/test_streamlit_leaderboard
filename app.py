@@ -19,7 +19,7 @@ SCOPE = [
 ]
 
 # ── Initialize gspread client once ──────────────────────────────────────────────
-@st.experimental_singleton
+@st.cache_resource
 def get_gspread_client():
     # Load service account info from secrets
     svc_info = st.secrets["gcp_service_account"]
@@ -80,58 +80,3 @@ def load_points_data(worksheet_option="first"):
             "Total Points": pd.to_numeric(df_raw[pts_col], errors="coerce")
         }).dropna(subset=["Total Points"])
         if clean.empty:
-            st.warning("No numeric point data found after cleaning.")
-            return pd.DataFrame(), ws.title
-
-        clean = clean.sort_values("Total Points", ascending=False).reset_index(drop=True)
-        clean["Rank"] = clean.index + 1
-        clean = clean[["Rank", "POD Number", "Total Points"]]
-
-        return clean, ws.title
-
-    except Exception as e:
-        st.error(f"Error loading data from Google Sheets: {e}")
-        return pd.DataFrame(), "Error"
-
-# ── Sidebar / Debugging ─────────────────────────────────────────────────────────
-st.sidebar.header("📊 Worksheet Settings")
-if st.sidebar.button("Show Available Worksheets"):
-    try:
-        client    = get_gspread_client()
-        sheet     = client.open_by_key(st.secrets["sheet_id"])
-        for i, w in enumerate(sheet.worksheets(), start=1):
-            st.sidebar.write(f"{i}. {w.title}")
-    except Exception as e:
-        st.sidebar.error(f"{e}")
-
-# ── Main ────────────────────────────────────────────────────────────────────────
-df, ws_name = load_points_data("first")
-st.info(f"📋 Using data from worksheet: **{ws_name}**")
-
-if st.button("🔄 Refresh Data"):
-    # Clear only this function’s cache, then rerun
-    load_points_data.clear()
-    st.experimental_rerun()
-
-if not df.empty:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total PODs",      len(df))
-    c2.metric("Total Points",    f"{df['Total Points'].sum():,.0f}")
-    c3.metric("Average Points",  f"{df['Total Points'].mean():.1f}")
-
-    st.subheader("🏆 Points Table")
-    def highlight_top_3(r):
-        if r["Rank"] == 1: return ["background-color:#FFD700"]*3
-        if r["Rank"] == 2: return ["background-color:#C0C0C0"]*3
-        if r["Rank"] == 3: return ["background-color:#CD7F32"]*3
-        return [""]*3
-
-    styled = df.style.apply(highlight_top_3, axis=1)
-    st.dataframe(styled, use_container_width=True)
-
-    with st.expander("📋 Raw Data"):
-        st.dataframe(df, use_container_width=True)
-        csv = df.to_csv(index=False)
-        st.download_button("📥 Download CSV", data=csv, file_name="points_table.csv")
-else:
-    st.warning("No data available. Check your Google Sheet connection.")
