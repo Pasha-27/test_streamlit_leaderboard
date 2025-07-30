@@ -4,6 +4,7 @@ import gspread
 import json
 import re
 from google.oauth2.service_account import Credentials
+from gspread.exceptions import WorksheetNotFound
 
 # ── Streamlit configuration ──────────────────────────────────────────────────
 st.set_page_config(
@@ -36,7 +37,16 @@ def get_gspread_client():
 def load_sheet(sheet_id: str, worksheet_name: str = None):
     client = get_gspread_client()
     sheet = client.open_by_key(sheet_id)
-    ws = sheet.worksheet(worksheet_name) if worksheet_name else sheet.worksheets()[0]
+    try:
+        if worksheet_name:
+            ws = sheet.worksheet(worksheet_name)
+        else:
+            ws = sheet.worksheets()[0]
+    except WorksheetNotFound:
+        available = [w.title for w in sheet.worksheets()]
+        st.error(f"⚠️ Worksheet '{worksheet_name}' not found. Available worksheets: {available}")
+        return pd.DataFrame(), worksheet_name or ""
+
     data = ws.get_all_values()
     if not data or len(data) < 2:
         st.error("⚠️ No data rows found. Check your sheet ID & sharing permissions.")
@@ -89,9 +99,11 @@ for key, val in st.secrets.items():
     if m:
         idx = int(m.group(1)) if m.group(1) else 1
         sheet_ids.append((idx, val))
+
 if not sheet_ids:
     st.error("⚠️ No sheet IDs found in secrets. Add 'sheet_id_1', 'sheet_id_2', ...")
     st.stop()
+
 sheet_ids.sort(key=lambda x: x[0])
 
 # ── Load raw data and build for each sheet ─────────────────────────────────────
