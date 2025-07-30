@@ -165,7 +165,9 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         bar_color = "#27ae60"
                     st.markdown(
                         f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
-                        f"<span>{ch}</span><span>{int(display_prog)}%</span></div>",
+                        f"<span>{ch}</span><span>{int(prog)}%</span></div>",
+                        unsafe_allow_html=True
+                    ))}%</span></div>",
                         unsafe_allow_html=True
                     )
                     st.markdown(
