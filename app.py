@@ -115,7 +115,7 @@ sheet_ids.sort(key=lambda x: x[0])
 dsets = []  # (idx, title, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 2:
-        df_raw, title = load_sheet(sid, worksheet_name="Channel-view")
+        df_raw, title = load_sheet(sid, worksheet_name="Channel-View")
         df_leader = pd.DataFrame()
     else:
         df_raw, title = load_sheet(sid)
