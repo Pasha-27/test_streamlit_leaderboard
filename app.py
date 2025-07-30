@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 import json
+import re
 from google.oauth2.service_account import Credentials
 
 # ── Streamlit configuration ──────────────────────────────────────────────────
@@ -21,7 +22,10 @@ SCOPE = [
 # ── Cache the gspread client ───────────────────────────────────────────────────
 @st.cache_resource
 def get_gspread_client():
-    svc = st.secrets["gcp_service_account"]
+    svc = st.secrets.get("gcp_service_account")
+    if not svc:
+        st.error("⚠️ 'gcp_service_account' not found in secrets.")
+        st.stop()
     if isinstance(svc, str):
         svc = json.loads(svc)
     creds = Credentials.from_service_account_info(svc, scopes=SCOPE)
@@ -43,98 +47,80 @@ def load_sheet(sheet_id: str, worksheet_name: str = None):
 
 # ── Build leaderboard from a totals row ────────────────────────────────────────
 def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 13) -> pd.DataFrame:
-    """
-    Extracts totals from the specified zero-based row index and returns
-    a DataFrame with columns: Rank, POD Number, Total Points.
-    """
     try:
         total_row = df_raw.iloc[total_row_index]
-    except IndexError:
-        st.error(f"⚠️ Row {total_row_index+1} not found in sheet. Adjust the index.")
+    except Exception:
+        st.error(f"⚠️ Totals row index {total_row_index} out of range.")
         return pd.DataFrame()
-
-    # Identify POD columns
-    pod_cols = [c for c in df_raw.columns if "pod" in c.lower()]
+    pod_cols = [c for c in df_raw.columns if re.search(r"pod", c, re.I)]
     if not pod_cols:
         st.error("⚠️ No POD columns found. Ensure headers contain 'POD'.")
         return pd.DataFrame()
-
-    # Parse and sum
     totals = (
         total_row[pod_cols]
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .pipe(pd.to_numeric, errors="coerce")
     )
-
-    # Map headers to pod numbers
-    def extract_pod_num(header: str) -> int:
-        digits = ''.join(filter(str.isdigit, header))
-        return int(digits) if digits else header
-
+    def extract_pod_num(hdr: str) -> str:
+        digits = ''.join(filter(str.isdigit, hdr))
+        return digits or hdr
     pod_numbers = [extract_pod_num(h) for h in pod_cols]
-
-    # Build summary
     summary = pd.DataFrame({
         "POD Number": pod_numbers,
         "Total Points": totals.values
     })
     summary = summary.sort_values("Total Points", ascending=False).reset_index(drop=True)
     summary["Rank"] = summary.index + 1
-    return summary.loc[:, ["Rank", "POD Number", "Total Points"]]
+    return summary[["Rank","POD Number","Total Points"]]
 
 # ── Highlight styling for dark theme ───────────────────────────────────────────
 def highlight_top_dark(row):
-    c1, c2, c3 = "#664400", "#555555", "#553300"
-    if row["Rank"] == 1:
-        return [f"background-color:{c1};color:#fff"] * 3
-    if row["Rank"] == 2:
-        return [f"background-color:{c2};color:#fff"] * 3
-    if row["Rank"] == 3:
-        return [f"background-color:{c3};color:#fff"] * 3
+    colors = {1: "#664400", 2: "#555555", 3: "#553300"}
+    c = colors.get(row["Rank"])
+    if c:
+        return [f"background-color:{c};color:#fff"] * 3
     return [""] * 3
 
-# ── Retrieve both sheet IDs from secrets ───────────────────────────────────────
-sheet1_id = st.secrets["sheet_id_1"]
-sheet2_id = st.secrets["sheet_id_2"]
+# ── Discover sheet IDs in secrets ─────────────────────────────────────────────
+sheet_ids = []
+for key, val in st.secrets.items():
+    m = re.match(r"sheet_id(?:_(\d+))?$", key)
+    if m:
+        idx = int(m.group(1)) if m.group(1) else 1
+        sheet_ids.append((idx, val))
+if not sheet_ids:
+    st.error("⚠️ No sheet IDs found in secrets. Add 'sheet_id_1', 'sheet_id_2', ...")
+    st.stop()
+sheet_ids.sort(key=lambda x: x[0])
 
-# ── Load raw data for both sheets ──────────────────────────────────────────────
-df1_raw, ws1_name = load_sheet(sheet1_id)
-df2_raw, ws2_name = load_sheet(sheet2_id)
+# ── Load raw data and build leaderboards ───────────────────────────────────────
+dsets = []  # list of (sheet_title, df_raw, df_leader)
+for idx, sid in sheet_ids:
+    df_raw, title = load_sheet(sid)
+    df_leader = build_leaderboard(df_raw, total_row_index=13)
+    dsets.append((title, df_raw, df_leader))
 
-# ── Build leaderboards (row 14 → index 13) ────────────────────────────────────
-df1 = build_leaderboard(df1_raw, total_row_index=13)
-df2 = build_leaderboard(df2_raw, total_row_index=13)
-
-# ── Refresh button clears cache ────────────────────────────────────────────────
+# ── Refresh button clears caches ────────────────────────────────────────────────
 if st.button("🔄 Refresh Data"):
     load_sheet.clear()
     get_gspread_client.clear()
     st.experimental_rerun()
 
-# ── Display in tabs ─────────────────────────────────────────────────────────────
-tab1, tab2 = st.tabs([ws1_name, ws2_name])
-
-with tab1:
-    st.subheader(f"🏆 {ws1_name} Leaderboard")
-    if not df1.empty:
-        styled1 = df1.style.apply(highlight_top_dark, axis=1)
-        st.dataframe(styled1, use_container_width=True)
-        with st.expander("📋 Raw Data"):
-            st.dataframe(df1_raw, use_container_width=True)
-            csv1 = df1.to_csv(index=False)
-            st.download_button("📥 Download CSV", data=csv1, file_name=f"{ws1_name}_leaderboard.csv")
-    else:
-        st.warning("No leaderboard data for this sheet.")
-
-with tab2:
-    st.subheader(f"🏆 {ws2_name} Leaderboard")
-    if not df2.empty:
-        styled2 = df2.style.apply(highlight_top_dark, axis=1)
-        st.dataframe(styled2, use_container_width=True)
-        with st.expander("📋 Raw Data"):
-            st.dataframe(df2_raw, use_container_width=True)
-            csv2 = df2.to_csv(index=False)
-            st.download_button("📥 Download CSV", data=csv2, file_name=f"{ws2_name}_leaderboard.csv")
-    else:
-        st.warning("No leaderboard data for this sheet.")
+# ── Render tabs for each sheet ─────────────────────────────────────────────────
+tabs = st.tabs([title for title,_,_ in dsets])
+for tab, (title, df_raw, df_leader) in zip(tabs, dsets):
+    with tab:
+        st.subheader(f"🏆 {title} Leaderboard")
+        if not df_leader.empty:
+            styled = df_leader.style.apply(highlight_top_dark, axis=1)
+            st.dataframe(styled, use_container_width=True)
+            with st.expander("📋 Raw Data"):
+                st.dataframe(df_raw, use_container_width=True)
+                csv = df_leader.to_csv(index=False)
+                st.download_button(
+                    "📥 Download CSV", data=csv,
+                    file_name=f"{title}_leaderboard.csv"
+                )
+        else:
+            st.warning("No leaderboard data for this sheet.")
