@@ -116,7 +116,7 @@ dsets = []  # (idx, title, df_raw, df_leader)
 for idx, sid in sheet_ids:
     if idx == 2:
         # First tab: Channel-view raw
-        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
+        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-view")
         dsets.append((idx, title_ch, df_ch, pd.DataFrame()))
         # Second tab: POD-View raw
         df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
@@ -130,7 +130,12 @@ for idx, sid in sheet_ids:
 if st.button("🔄 Refresh Data"):
     load_sheet.clear()
     get_gspread_client.clear()
-    st.experimental_rerun()
+    # Rerun app to reflect cleared cache
+    try:
+        st.experimental_rerun()
+    except AttributeError:
+        # st.experimental_rerun may not exist in this Streamlit version
+        pass
 
 # ── Render tabs ────────────────────────────────────────────────────────────────
 tabs = st.tabs([title for _, title, _, _ in dsets])
