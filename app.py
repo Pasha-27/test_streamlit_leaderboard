@@ -66,12 +66,13 @@ def load_sheet(sheet_id: str, worksheet_name: str = None):
     return df_raw, ws.title
 
 # ── Build leaderboard from a totals row ────────────────────────────────────────
-def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 13) -> pd.DataFrame:
+def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.DataFrame:
     try:
         total_row = df_raw.iloc[total_row_index]
     except Exception:
         st.error(f"⚠️ Totals row index {total_row_index} out of range.")
         return pd.DataFrame()
+    # identify POD columns
     pod_cols = [c for c in df_raw.columns if re.search(r"pod", c, re.I)]
     if not pod_cols:
         st.error("⚠️ No POD columns found. Ensure headers contain 'POD'.")
@@ -95,9 +96,7 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 13) -> pd.Dat
 def highlight_top_dark(row):
     colors = {1: "#664400", 2: "#555555", 3: "#553300"}
     c = colors.get(row["Rank"])
-    if c:
-        return [f"background-color:{c};color:#fff"] * len(row)
-    return [""] * len(row)
+    return [f"background-color:{c};color:#fff"] * len(row) if c else [""] * len(row)
 
 # ── Discover sheet IDs in secrets ─────────────────────────────────────────────
 sheet_ids = []
@@ -111,41 +110,41 @@ if not sheet_ids:
     st.stop()
 sheet_ids.sort(key=lambda x: x[0])
 
-# ── Load data and build sets ───────────────────────────────────────────────────
-dsets = []  # (idx, title, df_raw, df_leader)
+# ── Load data and build tabs ───────────────────────────────────────────────────
+dsets = []  # (tab_label, df_raw, df_leader)
 for idx, sid in sheet_ids:
-    if idx == 2:
-        # First tab: Channel-view raw
+    if idx == 1:
+        # Live Leaderboard sheet: use 'LIVE LEADERBOARD' worksheet and row 14 totals
+        df_live, title_live = load_sheet(sid, worksheet_name="LIVE LEADERBOARD")
+        df_leader = build_leaderboard(df_live, total_row_index=12)
+        dsets.append((title_live, df_live, df_leader))
+    elif idx == 2:
+        # Channel-view raw
         df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
-        dsets.append((idx, title_ch, df_ch, pd.DataFrame()))
-        # Second tab: POD-View raw
+        dsets.append((title_ch, df_ch, pd.DataFrame()))
+        # POD-View raw
         df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
-        dsets.append((idx, title_pod, df_pod, pd.DataFrame()))
-    else:
-        df_raw, title = load_sheet(sid)
-        df_leader = build_leaderboard(df_raw, total_row_index=13)
-        dsets.append((idx, title, df_raw, df_leader))
+        dsets.append((title_pod, df_pod, pd.DataFrame()))
 
 # ── Refresh button clears caches ────────────────────────────────────────────────
 if st.button("🔄 Refresh Data"):
     load_sheet.clear()
     get_gspread_client.clear()
-    # Rerun app to reflect cleared cache
     try:
         st.experimental_rerun()
     except AttributeError:
-        # st.experimental_rerun may not exist in this Streamlit version
         pass
 
 # ── Render tabs ────────────────────────────────────────────────────────────────
-tabs = st.tabs([title for _, title, _, _ in dsets])
-for tab, (idx, title, df_raw, df_leader) in zip(tabs, dsets):
+tab_labels = [label for label, _, _ in dsets]
+tabs = st.tabs(tab_labels)
+for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
     with tab:
         if df_leader.empty:
-            st.subheader(f"📋 {title} (Raw Data)")
+            st.subheader(f"📋 {label} (Raw Data)")
             st.dataframe(df_raw, use_container_width=True)
         else:
-            st.subheader(f"🏆 {title} Leaderboard")
+            st.subheader(f"🏆 {label}")
             styled = df_leader.style.apply(highlight_top_dark, axis=1)
             st.dataframe(styled, use_container_width=True)
             with st.expander("📋 Raw Data"):
@@ -153,5 +152,5 @@ for tab, (idx, title, df_raw, df_leader) in zip(tabs, dsets):
                 csv = df_leader.to_csv(index=False)
                 st.download_button(
                     "📥 Download CSV", data=csv,
-                    file_name=f"{title}_leaderboard.csv"
+                    file_name=f"{label}_leaderboard.csv"
                 )
