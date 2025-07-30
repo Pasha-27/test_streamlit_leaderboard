@@ -141,8 +141,8 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
             if not df_raw.empty:
                 channel_col = df_raw.columns[0]
                 progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
-                df_channels = df_raw.iloc[2:].copy()
-                df_channels = df_channels[df_channels[channel_col].astype(str).str.strip() != ""]
+                                # Only take rows 3–9 (exactly 7 channels)
+                df_channels = df_raw.iloc[1:9].copy().astype(str).str.strip() != ""]
                 for _, row in df_channels.iterrows():
                     ch = row[channel_col]
                     prog_raw = str(row[progress_col]).strip()
