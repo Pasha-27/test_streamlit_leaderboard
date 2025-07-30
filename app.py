@@ -119,7 +119,7 @@ for idx, sid in sheet_ids:
         df_leader = build_leaderboard(df_live, total_row_index=12)
         dsets.append((title_live, df_live, df_leader))
     elif idx == 2:
-        # Channel-view raw
+        # Channel-view raw with progress bars
         df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
         dsets.append((title_ch, df_ch, pd.DataFrame()))
         # POD-View raw
@@ -140,7 +140,29 @@ tab_labels = [label for label, _, _ in dsets]
 tabs = st.tabs(tab_labels)
 for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
     with tab:
-        if df_leader.empty:
+        if label == "Channel-View":
+            st.subheader("📈 Channel Progress")
+            if not df_raw.empty:
+                # assume Column A=channel, Column F=progress
+                channel_col = df_raw.columns[0]
+                progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
+                # rows 3-9 in sheet => df_raw.iloc[1:9]
+                for _, row in df_raw.iloc[1:9].iterrows():
+                    ch = row[channel_col]
+                    prog_raw = str(row[progress_col]).strip()
+                    # strip non-numeric
+                    prog_val = re.sub(r"[^0-9.]", "", prog_raw)
+                    try:
+                        prog = float(prog_val)
+                    except:
+                        prog = 0.0
+                    st.write(f"**{ch}**")
+                    st.progress(min(max(int(prog), 0), 100))
+                with st.expander("📋 Raw Data"):
+                    st.dataframe(df_raw, use_container_width=True)
+            else:
+                st.warning("No data available for Channel-View.")
+        elif df_leader.empty:
             st.subheader(f"📋 {label} (Raw Data)")
             st.dataframe(df_raw, use_container_width=True)
         else:
