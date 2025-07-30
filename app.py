@@ -4,11 +4,11 @@ import gspread
 import json
 from google.oauth2.service_account import Credentials
 
-# ── Page configuration ─────────────────────────────────────────────────────────
+# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Points Table Dashboard",
     page_icon="🏆",
-    layout="wide"
+    layout="wide",
 )
 st.title("🏆 Points Table Dashboard")
 
@@ -18,16 +18,17 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive.readonly",
 ]
 
-# ── Cache the gspread client ───────────────────────────────────────────────────
-@st.cache(allow_output_mutation=True)
+# ── Cache the gspread client as a Resource ──────────────────────────────────────
+@st.cache_resource
 def get_gspread_client():
-    svc_info = st.secrets["gcp_service_account"]
-    if isinstance(svc_info, str):
-        svc_info = json.loads(svc_info)
-    creds = Credentials.from_service_account_info(svc_info, scopes=SCOPE)
+    svc = st.secrets["gcp_service_account"]
+    # If you pasted the JSON in as a string, parse it
+    if isinstance(svc, str):
+        svc = json.loads(svc)
+    creds = Credentials.from_service_account_info(svc, scopes=SCOPE)
     return gspread.authorize(creds)
 
-# ── Load & clean the data ──────────────────────────────────────────────────────
+# ── Load & clean the data (cached for 5 min) ────────────────────────────────────
 @st.cache_data(ttl=300)
 def load_points_data(worksheet_option="first"):
     try:
@@ -35,18 +36,20 @@ def load_points_data(worksheet_option="first"):
         sheet_id = st.secrets["sheet_id"]
         sheet    = client.open_by_key(sheet_id)
 
-        # pick the worksheet
+        # Pick your worksheet
         if worksheet_option == "first":
             ws = sheet.worksheets()[0]
         elif worksheet_option == "by_name":
-            ws = sheet.worksheet("Sheet1")  # ← rename if needed
+            ws = sheet.worksheet("Sheet1")  # ← rename if you need
         else:
             ws = sheet.sheet1
 
+        # Try the records API
         records = ws.get_all_records()
         if records:
             df_raw = pd.DataFrame(records)
         else:
+            # Fallback: grab all values
             all_vals = ws.get_all_values()
             if not all_vals or len(all_vals) < 2:
                 st.error("⚠️ No data rows found. Check your sheet ID & sharing permissions.")
@@ -54,23 +57,38 @@ def load_points_data(worksheet_option="first"):
             header, *rows = all_vals
             df_raw = pd.DataFrame(rows, columns=header)
 
-        # auto-detect columns
-        pod_col = next(
-            (c for c in df_raw.columns if any(k in c.lower() for k in ["pod","team","player","name"])),
-            df_raw.columns[0]
-        )
-        pts_col = next(
-            (c for c in df_raw.columns if any(k in c.lower() for k in ["point","score","total"])),
-            (df_raw.columns[1] if len(df_raw.columns) > 1 else None)
-        )
+        # ── Find the “POD” column ─────────────────────────────────────────────────
+        pod_candidates = [
+            c for c in df_raw.columns
+            if any(k in c.lower() for k in ("pod","team","player","name"))
+        ]
+        pod_col = pod_candidates[0] if pod_candidates else df_raw.columns[0]
+
+        # ── Auto‑detect the first truly numeric column ───────────────────────────────
+        pts_col = None
+        for c in df_raw.columns:
+            # strip out non‑digits (e.g. % signs), then test conversion
+            cleaned = df_raw[c].astype(str).str.replace(r"[^0-9.\-]", "", regex=True)
+            if pd.to_numeric(cleaned, errors="coerce").notna().any():
+                pts_col = c
+                break
+
         if pts_col is None:
-            st.error("⚠️ Couldn't locate a numeric column for points.")
+            st.error("⚠️ Couldn't locate any numeric column for points.")
             return pd.DataFrame(), ws.title
 
+        # ── Build & clean the final table ─────────────────────────────────────────
+        total_pts = (
+            df_raw[pts_col]
+            .astype(str)
+            .str.replace(r"[^0-9.\-]", "", regex=True)
+            .pipe(pd.to_numeric, errors="coerce")
+        )
         clean = pd.DataFrame({
             "POD Number": df_raw[pod_col],
-            "Total Points": pd.to_numeric(df_raw[pts_col], errors="coerce")
+            "Total Points": total_pts
         }).dropna(subset=["Total Points"])
+
         if clean.empty:
             st.warning("No numeric point data found after cleaning.")
             return pd.DataFrame(), ws.title
@@ -78,13 +96,14 @@ def load_points_data(worksheet_option="first"):
         clean = clean.sort_values("Total Points", ascending=False).reset_index(drop=True)
         clean["Rank"] = clean.index + 1
         clean = clean[["Rank", "POD Number", "Total Points"]]
+
         return clean, ws.title
 
     except Exception as e:
         st.error(f"Error loading data from Google Sheets: {e}")
         return pd.DataFrame(), "Error"
 
-# ── Sidebar for debugging ────────────────────────────────────────────────────────
+# ── Sidebar / Debug ─────────────────────────────────────────────────────────────
 st.sidebar.header("📊 Worksheet Settings")
 if st.sidebar.button("Show Available Worksheets"):
     try:
@@ -100,7 +119,9 @@ df, ws_name = load_points_data("first")
 st.info(f"📋 Using data from worksheet: **{ws_name}**")
 
 if st.button("🔄 Refresh Data"):
+    # Clear both caches, then rerun
     load_points_data.clear()
+    get_gspread_client.clear()
     st.experimental_rerun()
 
 if not df.empty:
