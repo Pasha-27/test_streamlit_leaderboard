@@ -150,9 +150,7 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         prog = float(prog_val)
                     except:
                         prog = 0.0
-                    # cap for bar
                     display_prog = min(prog, 100)
-                    # color selection
                     if display_prog < 20:
                         bar_color = "#555555"
                     elif display_prog < 30:
@@ -163,13 +161,11 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         bar_color = "#f39c12"
                     else:
                         bar_color = "#27ae60"
-                    # render label
                     st.markdown(
                         f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
                         f"<span>{ch}</span><span>{int(prog)}%</span></div>",
                         unsafe_allow_html=True
                     )
-                    # render bar
                     st.markdown(
                         f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'>"
                         f"<div style='width:{display_prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
@@ -185,7 +181,15 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
             st.dataframe(df_raw, use_container_width=True)
         else:
             st.subheader(f"🏆 {label}")
-            styled = df_leader.style.apply(highlight_top_dark, axis=1)
+            # Increase font size of leaderboard table text
+            styled = (
+                df_leader.style
+                    .apply(highlight_top_dark, axis=1)
+                    .set_table_styles([
+                        {"selector": "td", "props": [("font-size", "24px")]},
+                        {"selector": "th", "props": [("font-size", "24px")]}
+                    ])
+            )
             st.dataframe(styled, use_container_width=True)
             with st.expander("📋 Raw Data"):
                 st.dataframe(df_raw, use_container_width=True)
