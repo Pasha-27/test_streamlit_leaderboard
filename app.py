@@ -186,8 +186,8 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                 df_leader.style
                     .apply(highlight_top_dark, axis=1)
                     .set_table_styles([
-                        {"selector": "td", "props": [("font-size", "24px")]},
-                        {"selector": "th", "props": [("font-size", "24px")]}
+                        {"selector": "td", "props": [("font-size", "48px")]},
+                        {"selector": "th", "props": [("font-size", "48px")]}
                     ])
             )
             st.dataframe(styled, use_container_width=True)
