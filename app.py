@@ -13,7 +13,7 @@ st.set_page_config(
     page_icon="🏆",
     layout="wide",
 )
-# (Removed page title heading)
+# (Heading intentionally removed)
 
 # ── Google Sheets API scope ────────────────────────────────────────────────────
 SCOPE = [
@@ -121,26 +121,27 @@ def render_podium(df_leader: pd.DataFrame):
         position: relative;
         border-radius: 18px;
         padding: 16px;
-        color: #fff;
+        color: #ffffff;
         background: linear-gradient(145deg, #2a2a2a, #131313);
         box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
         display: flex;
-        align-items: flex-end;
-        justify-content: center;
+        align-items: center;           /* center vertically */
+        justify-content: center;       /* center horizontally */
         min-height: 180px;
+        overflow: hidden;
       }}
-      .podium-1 {{
-        min-height: 240px;
-        background: linear-gradient(150deg, #f2c94c, #b48a00);
+      /* Contrast overlay for readability */
+      .podium-card::after {{
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0.25), rgba(0,0,0,0.35));
+        pointer-events: none;
       }}
-      .podium-2 {{
-        min-height: 200px;
-        background: linear-gradient(150deg, #bdc3c7, #808b96);
-      }}
-      .podium-3 {{
-        min-height: 180px;
-        background: linear-gradient(150deg, #d29d63, #8e5a2a);
-      }}
+      .podium-1 {{ min-height: 240px; background: linear-gradient(150deg, #f2c94c, #b48a00); }}
+      .podium-2 {{ min-height: 200px; background: linear-gradient(150deg, #bdc3c7, #808b96); }}
+      .podium-3 {{ min-height: 180px; background: linear-gradient(150deg, #d29d63, #8e5a2a); }}
+
       .podium-rank-badge {{
         position: absolute;
         top: -12px;
@@ -153,13 +154,36 @@ def render_podium(df_leader: pd.DataFrame):
         font-size: 20px;
         padding: 10px 14px;
         border-radius: 12px;
+        z-index: 2;
       }}
-      .podium-content {{ text-align: center; line-height: 1.2; }}
-      .podium-name {{ font-size: 28px; font-weight: 800; letter-spacing: 0.3px; margin-bottom: 6px; }}
-      .podium-points {{ font-size: 18px; font-weight: 700; opacity: 0.95; }}
+      .podium-content {{
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        line-height: 1.15;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.55), 0 0 2px rgba(0,0,0,0.6);
+      }}
+      .podium-name {{
+        font-size: 36px;               /* bigger name */
+        font-weight: 900;
+        letter-spacing: 0.2px;
+        color: #ffffff;                 /* high contrast */
+        margin: 0;
+      }}
+      .podium-points {{
+        font-size: 36px;               /* doubled from 18px */
+        font-weight: 800;
+        color: #f7f7fb;                /* slightly brighter for contrast */
+        opacity: 0.98;
+        margin: 0;
+      }}
       @media (max-width: 900px) {{
-        .podium-name {{ font-size: 22px; }}
-        .podium-points {{ font-size: 16px; }}
+        .podium-name {{ font-size: 28px; }}
+        .podium-points {{ font-size: 28px; }}
       }}
     </style>
 
