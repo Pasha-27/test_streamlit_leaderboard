@@ -97,6 +97,7 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.Dat
 def render_podium(df_leader: pd.DataFrame):
     top3 = df_leader.head(3).copy()
     if top3.empty:
+        st.info("No leaderboard data available.")
         return
 
     by_rank = {int(r): (str(n), float(p)) for r, n, p in zip(top3["Rank"], top3["POD Number"], top3["Total Points"])}
@@ -116,18 +117,17 @@ def render_podium(df_leader: pd.DataFrame):
         grid-template-columns: 1fr 1fr 1fr;
         gap: 24px;
         margin: 24px 0 8px 0;
-        overflow: visible; /* allow floating badges */
       }}
       .podium-item {{
         position: relative;
-        padding-top: 40px; /* room for floating badge */
+        padding-top: 56px; /* reserve space for floating badge so it doesn't get clipped */
       }}
       .podium-badge-top {{
         position: absolute;
-        top: 0;
         left: 50%;
-        transform: translate(-50%, -60%); /* float above and center */
-        z-index: 5;
+        top: -22px;                     /* float slightly above card */
+        transform: translateX(-50%);    /* center horizontally */
+        z-index: 10;
         background: linear-gradient(145deg, #111, #222);
         color: #fff;
         border: 2px solid rgba(255,255,255,0.18);
@@ -151,9 +151,8 @@ def render_podium(df_leader: pd.DataFrame):
         align-items: center;           /* center vertically */
         justify-content: center;       /* center horizontally */
         min-height: 180px;
-        overflow: visible;             /* don't clip floating bits */
+        overflow: visible;
       }}
-      /* Contrast overlay for readability */
       .podium-card::after {{
         content: "";
         position: absolute;
@@ -194,7 +193,7 @@ def render_podium(df_leader: pd.DataFrame):
       @media (max-width: 900px) {{
         .podium-name {{ font-size: 28px; }}
         .podium-points {{ font-size: 28px; }}
-        .podium-badge-top {{ font-size: 24px; }}
+        .podium-badge-top {{ font-size: 24px; top: -18px; }}
       }}
     </style>
 
@@ -230,20 +229,9 @@ def render_podium(df_leader: pd.DataFrame):
     """
     st.markdown(podium_html, unsafe_allow_html=True)
 
-# ── Helper: hide index across Pandas versions (kept, though table is hidden) ──
-def hide_index_compat(styler: pd.io.formats.style.Styler):
-    if hasattr(styler, "hide"):
-        try:
-            return styler.hide(axis="index")
-        except TypeError:
-            pass
-    if hasattr(styler, "hide_index"):
-        return styler.hide_index()
-    return styler
-
-# ── (Optional) table for ranks 4+ — NOT rendered per request ──────────────────
+# ── (Optional) table for ranks 4+ — hidden per request ────────────────────────
 def render_rest_table(_df_leader: pd.DataFrame):
-    return  # hidden for now
+    return  # keep hidden
 
 # ── Discover sheet IDs in secrets ─────────────────────────────────────────────
 sheet_ids = []
@@ -264,3 +252,85 @@ for idx, sid in sheet_ids:
         df_live, title_live = load_sheet(sid, worksheet_name="LIVE LEADERBOARD")
         df_leader = build_leaderboard(df_live, total_row_index=12)
         dsets.append((title_live, df_live, df_leader))
+    elif idx == 2:
+        df_ch, title_ch = load_sheet(sid, worksheet_name="Channel-View")
+        dsets.append((title_ch, df_ch, pd.DataFrame()))
+        df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
+        dsets.append((title_pod, df_pod, pd.DataFrame()))
+
+# ── Render tabs ────────────────────────────────────────────────────────────────
+tab_labels = [label for label, _, _ in dsets]
+tabs = st.tabs(tab_labels)
+for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
+    with tab:
+        if label == "Channel-View":
+            st.subheader("📈 Channel Progress")
+            if not df_raw.empty:
+                channel_col = df_raw.columns[0]
+                progress_col = df_raw.columns[5] if len(df_raw.columns) > 5 else df_raw.columns[-1]
+                df_channels = df_raw.iloc[1:8].copy()
+                for _, row in df_channels.iterrows():
+                    ch = row[channel_col]
+                    prog_raw = str(row[progress_col]).strip()
+                    prog_val = re.sub(r"[^0-9.]", "", prog_raw)
+                    try:
+                        prog = float(prog_val)
+                    except Exception:
+                        prog = 0.0
+                    display_prog = min(max(prog, 0), 100)
+                    if display_prog < 20:
+                        bar_color = "#555555"
+                    elif display_prog < 30:
+                        bar_color = "#c0392b"
+                    elif display_prog < 40:
+                        bar_color = "#d35400"
+                    elif display_prog < 50:
+                        bar_color = "#f39c12"
+                    else:
+                        bar_color = "#27ae60"
+                    st.markdown(
+                        f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
+                        f"<span>{escape(str(ch))}</span><span>{int(prog)}%</span></div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div style='background-color:#222222; border-radius:12px; width:100%; height:24px; margin-bottom:12px;'>"
+                        f"<div style='width:{display_prog}%; background-color:{bar_color}; height:100%; border-radius:12px;'></div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                with st.expander("📋 Raw Data"):
+                    st.dataframe(df_raw, use_container_width=True)
+            else:
+                st.warning("No data available for Channel-View.")
+
+        elif df_leader.empty:
+            st.subheader(f"📋 {label} (Raw Data)")
+            st.dataframe(df_raw, use_container_width=True)
+
+        else:
+            # ── Modern Leaderboard tab (Top 3 podium only) ──────────────────
+            st.subheader(f"🏆 {label}")
+            render_podium(df_leader)
+            # render_rest_table(df_leader)  # kept hidden
+
+            with st.expander("📥 Download & Raw Data"):
+                csv = df_leader.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Leaderboard CSV",
+                    data=csv,
+                    file_name=f"{label}_leaderboard.csv"
+                )
+                st.dataframe(df_raw, use_container_width=True)
+
+# ── Refresh button at the bottom ───────────────────────────────────────────────
+st.divider()
+col_spacer, col_btn = st.columns([0.8, 0.2])
+with col_btn:
+    if st.button("🔄 Refresh Data"):
+        load_sheet.clear()
+        get_gspread_client.clear()
+        try:
+            st.rerun()
+        except Exception:
+            pass
