@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 import json
 import re
+from html import escape
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
 
@@ -81,6 +82,7 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.Dat
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
         .pipe(pd.to_numeric, errors="coerce")
+        .fillna(0)
     )
     pod_numbers = [''.join(filter(str.isdigit, c)) or c for c in pod_cols]
     summary = pd.DataFrame({
@@ -89,13 +91,153 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.Dat
     })
     summary = summary.sort_values("Total Points", ascending=False).reset_index(drop=True)
     summary["Rank"] = summary.index + 1
-    return summary[["Rank", "POD Number", "Total Points"]]
+    # Reorder columns
+    summary = summary[["Rank", "POD Number", "Total Points"]]
+    return summary
 
-# ── Highlight styling for dark theme ───────────────────────────────────────────
+# ── Highlight styling for dark theme (kept for fallback) ───────────────────────
 def highlight_top_dark(row):
     colors = {1: "#664400", 2: "#555555", 3: "#553300"}
     c = colors.get(row["Rank"])
     return [f"background-color:{c};color:#fff"] * len(row) if c else [""] * len(row)
+
+# ── Modern podium renderer for Top 3 ───────────────────────────────────────────
+def render_podium(df_leader: pd.DataFrame):
+    top3 = df_leader.head(3).copy()
+    if top3.empty:
+        return
+
+    # Map to a dict keyed by rank for easy placement
+    by_rank = {int(r): (str(n), float(p)) for r, n, p in zip(top3["Rank"], top3["POD Number"], top3["Total Points"])}
+
+    def fmt_points(x: float) -> str:
+        # No decimals if an integer; else show up to 2 decimals
+        return f"{int(x):,}" if float(x).is_integer() else f"{x:,.2f}"
+
+    # Fallbacks if fewer than 3 rows exist
+    r1_name, r1_pts = by_rank.get(1, ("—", 0))
+    r2_name, r2_pts = by_rank.get(2, ("—", 0))
+    r3_name, r3_pts = by_rank.get(3, ("—", 0))
+
+    # Safe text
+    r1_name, r2_name, r3_name = escape(r1_name), escape(r2_name), escape(r3_name)
+
+    podium_html = f"""
+    <style>
+      .podium-wrap {{
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 24px;
+        margin: 12px 0 8px 0;
+      }}
+      .podium-card {{
+        position: relative;
+        border-radius: 18px;
+        padding: 16px;
+        color: #fff;
+        background: linear-gradient(145deg, #2a2a2a, #131313);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        min-height: 180px;
+      }}
+      .podium-1 {{
+        min-height: 240px;
+        background: linear-gradient(150deg, #f2c94c, #b48a00);
+      }}
+      .podium-2 {{
+        min-height: 200px;
+        background: linear-gradient(150deg, #bdc3c7, #808b96);
+      }}
+      .podium-3 {{
+        min-height: 180px;
+        background: linear-gradient(150deg, #d29d63, #8e5a2a);
+      }}
+      .podium-rank-badge {{
+        position: absolute;
+        top: -12px;
+        left: -12px;
+        background: rgba(0,0,0,0.55);
+        border: 2px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(4px);
+        color: #fff;
+        font-weight: 800;
+        font-size: 20px;
+        padding: 10px 14px;
+        border-radius: 12px;
+      }}
+      .podium-content {{
+        text-align: center;
+        line-height: 1.2;
+      }}
+      .podium-name {{
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 0.3px;
+        margin-bottom: 6px;
+      }}
+      .podium-points {{
+        font-size: 18px;
+        font-weight: 700;
+        opacity: 0.95;
+      }}
+      @media (max-width: 900px) {{
+        .podium-name {{ font-size: 22px; }}
+        .podium-points {{ font-size: 16px; }}
+      }}
+    </style>
+
+    <div class="podium-wrap">
+      <div class="podium-card podium-2">
+        <div class="podium-rank-badge">#2</div>
+        <div class="podium-content">
+          <div class="podium-name">POD {r2_name}</div>
+          <div class="podium-points">Total: {fmt_points(r2_pts)}</div>
+        </div>
+      </div>
+      <div class="podium-card podium-1">
+        <div class="podium-rank-badge">#1 🏆</div>
+        <div class="podium-content">
+          <div class="podium-name">POD {r1_name}</div>
+          <div class="podium-points">Total: {fmt_points(r1_pts)}</div>
+        </div>
+      </div>
+      <div class="podium-card podium-3">
+        <div class="podium-rank-badge">#3</div>
+        <div class="podium-content">
+          <div class="podium-name">POD {r3_name}</div>
+          <div class="podium-points">Total: {fmt_points(r3_pts)}</div>
+        </div>
+      </div>
+    </div>
+    """
+    st.markdown(podium_html, unsafe_allow_html=True)
+
+# ── Bigger, clean table for ranks 4+ (HTML + Styler) ───────────────────────────
+def render_rest_table(df_leader: pd.DataFrame):
+    if len(df_leader) <= 3:
+        return
+    df_rest = df_leader.iloc[3:].copy()
+    # Nicely format numbers
+    def fmt(v):
+        try:
+            v = float(v)
+            return f"{int(v):,}" if v.is_integer() else f"{v:,.2f}"
+        except:
+            return v
+    df_rest["Total Points"] = df_rest["Total Points"].apply(fmt)
+    # Use Pandas Styler and render as HTML so font-size actually applies
+    styled = (
+        df_rest.style
+        .hide_index()
+        .set_table_styles([
+            {"selector": "th", "props": [("font-size", "20px"), ("text-align", "left"), ("padding", "10px 12px"), ("background-color", "#1f1f1f"), ("color", "#eaeaea")]},
+            {"selector": "td", "props": [("font-size", "18px"), ("padding", "10px 12px"), ("border-bottom", "1px solid #2a2a2a"), ("color", "#eeeeee")]}
+        ])
+    )
+    st.markdown("### 📋 Ranks 4+")
+    st.markdown(styled.to_html(), unsafe_allow_html=True)
 
 # ── Discover sheet IDs in secrets ─────────────────────────────────────────────
 sheet_ids = []
@@ -127,8 +269,8 @@ if st.button("🔄 Refresh Data"):
     load_sheet.clear()
     get_gspread_client.clear()
     try:
-        st.experimental_rerun()
-    except AttributeError:
+        st.rerun()
+    except Exception:
         pass
 
 # ── Render tabs ────────────────────────────────────────────────────────────────
@@ -150,7 +292,7 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         prog = float(prog_val)
                     except:
                         prog = 0.0
-                    display_prog = min(prog, 100)
+                    display_prog = min(max(prog, 0), 100)
                     if display_prog < 20:
                         bar_color = "#555555"
                     elif display_prog < 30:
@@ -163,7 +305,7 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                         bar_color = "#27ae60"
                     st.markdown(
                         f"<div style='display:flex; justify-content:space-between; font-size:28px; font-weight:bold; margin-top:16px;'>"
-                        f"<span>{ch}</span><span>{int(prog)}%</span></div>",
+                        f"<span>{escape(str(ch))}</span><span>{int(prog)}%</span></div>",
                         unsafe_allow_html=True
                     )
                     st.markdown(
@@ -176,25 +318,24 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                     st.dataframe(df_raw, use_container_width=True)
             else:
                 st.warning("No data available for Channel-View.")
+
         elif df_leader.empty:
+            # Any tab that has no computed leaderboard (e.g., POD-View raw)
             st.subheader(f"📋 {label} (Raw Data)")
             st.dataframe(df_raw, use_container_width=True)
+
         else:
+            # ── Modern Leaderboard tab (Top 3 podium + table for the rest) ──
             st.subheader(f"🏆 {label}")
-            # Increase font size of leaderboard table text
-            styled = (
-                df_leader.style
-                    .apply(highlight_top_dark, axis=1)
-                    .set_table_styles([
-                        {"selector": "td", "props": [("font-size", "48px")]},
-                        {"selector": "th", "props": [("font-size", "48px")]}
-                    ])
-            )
-            st.dataframe(styled, use_container_width=True)
-            with st.expander("📋 Raw Data"):
-                st.dataframe(df_raw, use_container_width=True)
+            render_podium(df_leader)
+            render_rest_table(df_leader)
+
+            with st.expander("📥 Download & Raw Data"):
+                # Provide CSV for the entire leaderboard
                 csv = df_leader.to_csv(index=False)
                 st.download_button(
-                    "📥 Download CSV", data=csv,
+                    "📥 Download Leaderboard CSV",
+                    data=csv,
                     file_name=f"{label}_leaderboard.csv"
                 )
+                st.dataframe(df_raw, use_container_width=True)
