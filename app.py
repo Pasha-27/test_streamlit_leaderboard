@@ -91,15 +91,7 @@ def build_leaderboard(df_raw: pd.DataFrame, total_row_index: int = 12) -> pd.Dat
     })
     summary = summary.sort_values("Total Points", ascending=False).reset_index(drop=True)
     summary["Rank"] = summary.index + 1
-    # Reorder columns
-    summary = summary[["Rank", "POD Number", "Total Points"]]
-    return summary
-
-# ── Highlight styling for dark theme (kept for fallback) ───────────────────────
-def highlight_top_dark(row):
-    colors = {1: "#664400", 2: "#555555", 3: "#553300"}
-    c = colors.get(row["Rank"])
-    return [f"background-color:{c};color:#fff"] * len(row) if c else [""] * len(row)
+    return summary[["Rank", "POD Number", "Total Points"]]
 
 # ── Modern podium renderer for Top 3 ───────────────────────────────────────────
 def render_podium(df_leader: pd.DataFrame):
@@ -107,19 +99,14 @@ def render_podium(df_leader: pd.DataFrame):
     if top3.empty:
         return
 
-    # Map to a dict keyed by rank for easy placement
     by_rank = {int(r): (str(n), float(p)) for r, n, p in zip(top3["Rank"], top3["POD Number"], top3["Total Points"])}
 
     def fmt_points(x: float) -> str:
-        # No decimals if an integer; else show up to 2 decimals
         return f"{int(x):,}" if float(x).is_integer() else f"{x:,.2f}"
 
-    # Fallbacks if fewer than 3 rows exist
     r1_name, r1_pts = by_rank.get(1, ("—", 0))
     r2_name, r2_pts = by_rank.get(2, ("—", 0))
     r3_name, r3_pts = by_rank.get(3, ("—", 0))
-
-    # Safe text
     r1_name, r2_name, r3_name = escape(r1_name), escape(r2_name), escape(r3_name)
 
     podium_html = f"""
@@ -167,21 +154,9 @@ def render_podium(df_leader: pd.DataFrame):
         padding: 10px 14px;
         border-radius: 12px;
       }}
-      .podium-content {{
-        text-align: center;
-        line-height: 1.2;
-      }}
-      .podium-name {{
-        font-size: 28px;
-        font-weight: 800;
-        letter-spacing: 0.3px;
-        margin-bottom: 6px;
-      }}
-      .podium-points {{
-        font-size: 18px;
-        font-weight: 700;
-        opacity: 0.95;
-      }}
+      .podium-content {{ text-align: center; line-height: 1.2; }}
+      .podium-name {{ font-size: 28px; font-weight: 800; letter-spacing: 0.3px; margin-bottom: 6px; }}
+      .podium-points {{ font-size: 18px; font-weight: 700; opacity: 0.95; }}
       @media (max-width: 900px) {{
         .podium-name {{ font-size: 22px; }}
         .podium-points {{ font-size: 16px; }}
@@ -214,28 +189,50 @@ def render_podium(df_leader: pd.DataFrame):
     """
     st.markdown(podium_html, unsafe_allow_html=True)
 
+# ── Helper: hide index across Pandas versions ─────────────────────────────────
+def hide_index_compat(styler: pd.io.formats.style.Styler):
+    """
+    Works on Pandas 1.x and 2.x:
+    - Pandas 2.x: use styler.hide(axis="index")
+    - Pandas 1.x: fall back to styler.hide_index()
+    - If neither exists, no-op.
+    """
+    if hasattr(styler, "hide"):
+        try:
+            return styler.hide(axis="index")
+        except TypeError:
+            pass
+    if hasattr(styler, "hide_index"):
+        return styler.hide_index()
+    return styler  # graceful no-op
+
 # ── Bigger, clean table for ranks 4+ (HTML + Styler) ───────────────────────────
 def render_rest_table(df_leader: pd.DataFrame):
     if len(df_leader) <= 3:
         return
     df_rest = df_leader.iloc[3:].copy()
-    # Nicely format numbers
+
     def fmt(v):
         try:
             v = float(v)
             return f"{int(v):,}" if v.is_integer() else f"{v:,.2f}"
-        except:
+        except Exception:
             return v
+
     df_rest["Total Points"] = df_rest["Total Points"].apply(fmt)
-    # Use Pandas Styler and render as HTML so font-size actually applies
+
     styled = (
         df_rest.style
-        .hide_index()
         .set_table_styles([
-            {"selector": "th", "props": [("font-size", "20px"), ("text-align", "left"), ("padding", "10px 12px"), ("background-color", "#1f1f1f"), ("color", "#eaeaea")]},
-            {"selector": "td", "props": [("font-size", "18px"), ("padding", "10px 12px"), ("border-bottom", "1px solid #2a2a2a"), ("color", "#eeeeee")]}
+            {"selector": "th", "props": [("font-size", "20px"), ("text-align", "left"),
+                                         ("padding", "10px 12px"), ("background-color", "#1f1f1f"),
+                                         ("color", "#eaeaea")]},
+            {"selector": "td", "props": [("font-size", "18px"), ("padding", "10px 12px"),
+                                         ("border-bottom", "1px solid #2a2a2a"),
+                                         ("color", "#eeeeee")]}
         ])
     )
+    styled = hide_index_compat(styled)
     st.markdown("### 📋 Ranks 4+")
     st.markdown(styled.to_html(), unsafe_allow_html=True)
 
@@ -290,7 +287,7 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                     prog_val = re.sub(r"[^0-9.]", "", prog_raw)
                     try:
                         prog = float(prog_val)
-                    except:
+                    except Exception:
                         prog = 0.0
                     display_prog = min(max(prog, 0), 100)
                     if display_prog < 20:
@@ -320,7 +317,6 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                 st.warning("No data available for Channel-View.")
 
         elif df_leader.empty:
-            # Any tab that has no computed leaderboard (e.g., POD-View raw)
             st.subheader(f"📋 {label} (Raw Data)")
             st.dataframe(df_raw, use_container_width=True)
 
@@ -331,7 +327,6 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
             render_rest_table(df_leader)
 
             with st.expander("📥 Download & Raw Data"):
-                # Provide CSV for the entire leaderboard
                 csv = df_leader.to_csv(index=False)
                 st.download_button(
                     "📥 Download Leaderboard CSV",
