@@ -13,7 +13,7 @@ st.set_page_config(
     page_icon="🏆",
     layout="wide",
 )
-st.title("🏆 Points Table Dashboard")
+# (Removed page title heading)
 
 # ── Google Sheets API scope ────────────────────────────────────────────────────
 SCOPE = [
@@ -261,15 +261,6 @@ for idx, sid in sheet_ids:
         df_pod, title_pod = load_sheet(sid, worksheet_name="POD-View")
         dsets.append((title_pod, df_pod, pd.DataFrame()))
 
-# ── Refresh button clears caches ────────────────────────────────────────────────
-if st.button("🔄 Refresh Data"):
-    load_sheet.clear()
-    get_gspread_client.clear()
-    try:
-        st.rerun()
-    except Exception:
-        pass
-
 # ── Render tabs ────────────────────────────────────────────────────────────────
 tab_labels = [label for label, _, _ in dsets]
 tabs = st.tabs(tab_labels)
@@ -334,3 +325,15 @@ for tab, (label, df_raw, df_leader) in zip(tabs, dsets):
                     file_name=f"{label}_leaderboard.csv"
                 )
                 st.dataframe(df_raw, use_container_width=True)
+
+# ── Refresh button at the bottom ───────────────────────────────────────────────
+st.divider()
+col_spacer, col_btn = st.columns([0.8, 0.2])
+with col_btn:
+    if st.button("🔄 Refresh Data"):
+        load_sheet.clear()
+        get_gspread_client.clear()
+        try:
+            st.rerun()
+        except Exception:
+            pass
